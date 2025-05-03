@@ -350,10 +350,45 @@
             background: var(--cor-texto);
             color: var(--cor-fundo);
         }
+
+        /* Estilo do Loader */
+        .loader-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--cor-fundo);
+            border-top: 5px solid var(--cor-botao);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loader-container.show {
+            display: flex;
+        }
     </style>
 </head>
 
 <body>
+    <div class="loader-container" id="loader-container">
+        <div class="loader"></div>
+    </div>
 
     <div class="termo-container">
         <button class="theme-toggle" id="theme-toggle" aria-label="Alternar tema">
@@ -379,7 +414,7 @@
             // --- Configurações & Estado do Jogo ---
             const NUM_TENTATIVAS = 6;
             const TAMANHO_PALAVRA = 5;
-            let palavras = []; // Lista de palavras válidas (será preenchida pela API)
+            let palavrasUsadas = new Set(); // Histórico de palavras já usadas
             let palavraSecreta = '';
             let tentativaAtual = 0;
             let letraAtual = 0;
@@ -393,72 +428,73 @@
             const newGameBtn = document.getElementById('new-game-btn');
 
             // --- Funções Principais ---
-            async function buscarPalavras() {
-                try {
-                    // Lista de palavras comuns de 5 letras para usar como fallback
-                    const palavrasFallback = [
-                        "sagaz", "negro", "amago", "exito", "mexer", "termo", "nobre", "senso",
-                        "afeto", "algoz", "etica", "plena", "mutua", "tenue", "vigor", "sutil",
-                        "aquem", "porem", "poder", "sanar", "fosse", "ideia", "cerne", "moral",
-                        "desde", "muito", "justo", "honra", "quase", "torpe", "sonho", "razao",
-                        "futil", "video", "icone", "final", "jogar", "floco", "lapis", "arroz",
-                        "letra", "verde", "teste", "claro", "chuva", "livro", "papel", "sorte"
-                    ];
+            function normalizarTexto(texto) {
+                return texto.toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+                    .replace(/ç/g, 'c'); // Substitui ç por c
+            }
 
-                    // Busca palavras específicas de 5 letras
-                    const letras = 'abcdefghijklmnopqrstuvwxyz';
-                    const palavrasEncontradas = new Set();
-
-                    // Tenta buscar palavras começando com diferentes letras
-                    for (let i = 0; i < 5; i++) {
-                        const letra = letras[Math.floor(Math.random() * letras.length)];
-                        const response = await fetch(`https://api.dicionario-aberto.net/word/${letra}`);
-                        const data = await response.json();
-
-                        // Filtra apenas palavras exatamente com 5 letras
-                        data.forEach(palavra => {
-                            if (palavra.word.length === 5) {
-                                palavrasEncontradas.add(palavra.word.toLowerCase());
-                            }
-                        });
-                    }
-
-                    // Converte o Set para array
-                    palavras = Array.from(palavrasEncontradas);
-
-                    // Se não conseguir palavras suficientes da API, usa o fallback
-                    if (palavras.length < 10) {
-                        palavras = palavrasFallback;
-                    }
-
-                    console.log("Palavras carregadas:", palavras.length);
-                } catch (error) {
-                    console.error('Erro ao buscar palavras:', error);
-                    // Em caso de erro, usa a lista de fallback
-                    palavras = palavrasFallback;
+            function mostrarLoader(mostrar) {
+                const loaderContainer = document.getElementById('loader-container');
+                if (mostrar) {
+                    loaderContainer.classList.add('show');
+                } else {
+                    loaderContainer.classList.remove('show');
                 }
             }
 
-            async function iniciarJogo() {
-                // Se ainda não tiver palavras, busca da API
-                if (palavras.length === 0) {
-                    await buscarPalavras();
+            async function buscarPalavraRandom() {
+                try {
+                    mostrarLoader(true);
+                    const response = await fetch('https://api.dicionario-aberto.net/random');
+                    const data = await response.json();
+                    return normalizarTexto(data.word);
+                } catch (error) {
+                    console.error('Erro ao buscar palavra random:', error);
+                    throw error;
+                } finally {
+                    mostrarLoader(false);
+                }
+            }
+
+            async function buscarNovaPalavra() {
+                let tentativas = 0;
+                const maxTentativas = 50; // Limite de tentativas para evitar loop infinito
+
+                while (tentativas < maxTentativas) {
+                    const palavra = await buscarPalavraRandom();
+                    if (palavra.length === 5 && !palavrasUsadas.has(palavra)) {
+                        palavrasUsadas.add(palavra);
+                        return palavra;
+                    }
+                    tentativas++;
                 }
 
-                palavraSecreta = palavras[Math.floor(Math.random() * palavras.length)].toUpperCase();
-                console.log("Palavra Secreta (Debug):", palavraSecreta);
-                tentativaAtual = 0;
-                letraAtual = 0;
-                jogoTerminou = false;
-                gridState = Array(NUM_TENTATIVAS).fill(null).map(() => Array(TAMANHO_PALAVRA).fill(''));
+                throw new Error('Não foi possível encontrar uma nova palavra válida');
+            }
 
-                criarGrid();
-                criarTeclado();
-                limparMensagem();
-                newGameBtn.style.display = 'none';
+            async function iniciarJogo() {
+                try {
+                    palavraSecreta = await buscarNovaPalavra();
+                    console.log("Palavra Secreta (Debug):", palavraSecreta);
+                    tentativaAtual = 0;
+                    letraAtual = 0;
+                    jogoTerminou = false;
+                    gridState = Array(NUM_TENTATIVAS).fill(null).map(() => Array(TAMANHO_PALAVRA).fill(''));
 
-                // Seleciona a primeira célula ao iniciar
-                atualizarCelulaSelecionada();
+                    criarGrid();
+                    criarTeclado();
+                    limparMensagem();
+                    newGameBtn.style.display = 'none';
+
+                    // Seleciona a primeira célula ao iniciar
+                    atualizarCelulaSelecionada();
+                } catch (error) {
+                    console.error('Erro ao iniciar jogo:', error);
+                    mostrarMensagem("Erro ao iniciar jogo. Tente novamente.", false);
+                    newGameBtn.style.display = 'block';
+                }
             }
 
             function criarGrid() {
@@ -611,12 +647,16 @@
 
             async function verificarPalavra(palavra) {
                 try {
-                    const response = await fetch(`https://api.dicionario-aberto.net/word/${palavra.toLowerCase()}`);
+                    mostrarLoader(true);
+                    const palavraNormalizada = normalizarTexto(palavra);
+                    const response = await fetch(`https://api.dicionario-aberto.net/word/${palavraNormalizada}`);
                     const data = await response.json();
                     return Array.isArray(data) && data.length > 0;
                 } catch (error) {
                     console.error('Erro ao verificar palavra:', error);
                     return false;
+                } finally {
+                    mostrarLoader(false);
                 }
             }
 
@@ -628,6 +668,7 @@
                 }
 
                 const palavraTentada = gridState[tentativaAtual].join('');
+                const palavraNormalizada = normalizarTexto(palavraTentada);
 
                 // Verifica se a palavra existe
                 const palavraExiste = await verificarPalavra(palavraTentada);
@@ -641,11 +682,13 @@
             }
 
             function processarResultadoTentativa(palavraTentada) {
-                const feedback = calcularFeedback(palavraTentada, palavraSecreta);
+                const palavraTentadaNormalizada = normalizarTexto(palavraTentada);
+                const palavraSecretaNormalizada = normalizarTexto(palavraSecreta);
+                const feedback = calcularFeedback(palavraTentadaNormalizada, palavraSecretaNormalizada);
                 aplicarFeedbackVisual(tentativaAtual, feedback);
 
                 // Verifica vitória
-                if (palavraTentada === palavraSecreta) {
+                if (palavraTentadaNormalizada === palavraSecretaNormalizada) {
                     mostrarMensagem("Parabéns, você acertou!", true);
                     jogoTerminou = true;
                     newGameBtn.style.display = 'block';
@@ -854,8 +897,7 @@
             }
 
             // --- Inicialização ---
-            await buscarPalavras();
-            iniciarJogo();
+            await iniciarJogo();
 
         });
     </script>
