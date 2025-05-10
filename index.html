@@ -53,7 +53,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: space-between;
-            min-height: 100vh;
+            min-height: 100dvh;
             margin: 0;
             padding: 10px;
             box-sizing: border-box;
@@ -375,8 +375,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .loader-container.show {
@@ -417,7 +422,7 @@
             let palavrasUsadas = new Set(); // Histórico de palavras já usadas
             let palavraSecreta = '';
             let tentativaAtual = 0;
-            let letraAtual = 0;
+            let letraAtual = 1;
             let gridState = [];
             let jogoTerminou = false;
 
@@ -519,7 +524,8 @@
                             if (i === tentativaAtual && !jogoTerminou) {
                                 letraAtual = j; // Atualiza a posição atual para a célula clicada
                                 // Destaca a célula selecionada
-                                document.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('selected'));
+                                document.querySelectorAll('.grid-cell').forEach(c => c.classList.remove(
+                                    'selected'));
                                 cell.classList.add('selected');
                             }
                         });
@@ -622,13 +628,18 @@
             }
 
             function apagarLetra() {
-                if (letraAtual > 0) {
-                    letraAtual--;
+                const cell = obterCelula(tentativaAtual, letraAtual);
+                if (cell) {
                     gridState[tentativaAtual][letraAtual] = '';
-                    const cell = obterCelula(tentativaAtual, letraAtual);
-                    cell.querySelector('.cell-front').textContent = '';
+                    const front = cell.querySelector('.cell-front');
+                    if (front) {
+                        front.textContent = '';
+                    }
                     cell.classList.remove('filled');
-
+                    letraAtual--;
+                    if (letraAtual < 0) {
+                        letraAtual = 0;
+                    }
                     // Atualiza a célula selecionada
                     atualizarCelulaSelecionada();
                 }
@@ -637,11 +648,14 @@
             function atualizarCelulaSelecionada() {
                 // Remove a seleção de todas as células
                 document.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('selected'));
-
                 // Se a posição atual é válida, seleciona a célula
                 if (letraAtual < TAMANHO_PALAVRA) {
                     const cell = obterCelula(tentativaAtual, letraAtual);
-                    cell.classList.add('selected');
+                    cell?.classList.add('selected');
+                } else if (letraAtual === TAMANHO_PALAVRA) {
+                    const cell = obterCelula(tentativaAtual, TAMANHO_PALAVRA - 1);
+                    cell?.classList.add('selected');
+                    letraAtual = TAMANHO_PALAVRA - 1;
                 }
             }
 
@@ -661,7 +675,9 @@
             }
 
             async function submeterTentativa() {
-                if (letraAtual !== TAMANHO_PALAVRA) {
+                // Verifica se todas as células estão preenchidas
+                const todasPreenchidas = gridState[tentativaAtual].every(letra => letra !== '');
+                if (!todasPreenchidas) {
                     mostrarMensagem("Letras insuficientes!");
                     agitarLinha(tentativaAtual);
                     return;
@@ -773,7 +789,11 @@
                 const key = keyboardContainer.querySelector(`.key[data-key="${letra}"]`);
                 if (!key) return;
 
-                const statusPrioridade = { correct: 3, present: 2, absent: 1 };
+                const statusPrioridade = {
+                    correct: 3,
+                    present: 2,
+                    absent: 1
+                };
                 const statusAtualKey = key.classList.contains('correct') ? 'correct' :
                     key.classList.contains('present') ? 'present' :
                         key.classList.contains('absent') ? 'absent' :
