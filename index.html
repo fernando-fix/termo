@@ -452,9 +452,9 @@
             async function buscarPalavraRandom() {
                 try {
                     mostrarLoader(true);
-                    const response = await fetch('https://api.dicionario-aberto.net/random');
+                    const response = await fetch('https://termo-api.cursaweb.com.br/api/palavra-aleatoria');
                     const data = await response.json();
-                    return normalizarTexto(data.word);
+                    return normalizarTexto(data.data.palavra);
                 } catch (error) {
                     console.error('Erro ao buscar palavra random:', error);
                     throw error;
@@ -590,6 +590,8 @@
                 key = key.toUpperCase(); // Garante caixa alta
 
                 if (key === 'BACKSPACE') {
+                    apagarEsquerda();
+                } else if (key === 'DELETE') {
                     apagarLetra();
                 } else if (key === 'ENTER') {
                     await submeterTentativa();
@@ -627,7 +629,7 @@
                 }
             }
 
-            function apagarLetra() {
+            function apagarEsquerda() {
                 const cell = obterCelula(tentativaAtual, letraAtual);
                 if (cell) {
                     gridState[tentativaAtual][letraAtual] = '';
@@ -640,6 +642,20 @@
                     if (letraAtual < 0) {
                         letraAtual = 0;
                     }
+                    // Atualiza a célula selecionada
+                    atualizarCelulaSelecionada();
+                }
+            }
+
+            function apagarLetra() {
+                const cell = obterCelula(tentativaAtual, letraAtual);
+                if (cell) {
+                    gridState[tentativaAtual][letraAtual] = '';
+                    const front = cell.querySelector('.cell-front');
+                    if (front) {
+                        front.textContent = '';
+                    }
+                    cell.classList.remove('filled');
                     // Atualiza a célula selecionada
                     atualizarCelulaSelecionada();
                 }
@@ -663,9 +679,14 @@
                 try {
                     mostrarLoader(true);
                     const palavraNormalizada = normalizarTexto(palavra);
-                    const response = await fetch(`https://api.dicionario-aberto.net/word/${palavraNormalizada}`);
+                    const response = await fetch(
+                        `https://termo-api.cursaweb.com.br/api/verificar-palavra?palavra=${palavraNormalizada}`);
                     const data = await response.json();
-                    return Array.isArray(data) && data.length > 0;
+                    if (!response.ok) {
+                        console.error('Erro ao verificar palavra:', response.status, data.message);
+                        return false;
+                    }
+                    return data.success;
                 } catch (error) {
                     console.error('Erro ao verificar palavra:', error);
                     return false;
@@ -796,8 +817,8 @@
                 };
                 const statusAtualKey = key.classList.contains('correct') ? 'correct' :
                     key.classList.contains('present') ? 'present' :
-                        key.classList.contains('absent') ? 'absent' :
-                            ''; // Nenhum status ainda
+                    key.classList.contains('absent') ? 'absent' :
+                    ''; // Nenhum status ainda
 
                 // Só atualiza se o novo status for mais importante ou se não houver status
                 if (!statusAtualKey || statusPrioridade[status] > statusPrioridade[statusAtualKey]) {
